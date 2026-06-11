@@ -96,4 +96,4 @@ go build -o jvm.exe
 ```
 
 ## License
-MIT
+[MIT](https://github.com/Zoltron-0/jvm/blob/main/LICENSE)
