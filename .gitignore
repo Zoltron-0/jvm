@@ -1,0 +1,17 @@
+# Compiled binary
+jvm.exe
+
+# Go workspace files
+go.work
+go.work.sum
+
+# IDE and editor directories
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Windows thumbnail cache
+Thumbs.db
+Desktop.ini
