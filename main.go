@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -185,6 +186,11 @@ func switchActive(cfg *Config, arg string, configPath string, homeDir string) er
 		return fmt.Errorf("failed to update symlink: %v", err)
 	}
 
+	// Ensure JAVA_HOME is set correctly.
+	if err := setJAVA_HOME(homeDir); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -277,6 +283,12 @@ func setupPath(homeDir string) error {
 	for _, p := range paths {
 		if strings.EqualFold(strings.TrimSpace(p), javaBinDir) {
 			fmt.Printf("%s is already in your PATH.\n", javaBinDir)
+
+			// Ensure JAVA_HOME is set correctly.
+			if err := setJAVA_HOME(homeDir); err != nil {
+				return err
+			}
+
 			return nil
 		}
 	}
@@ -293,14 +305,65 @@ func setupPath(homeDir string) error {
 		return fmt.Errorf("failed to update PATH: %v", err)
 	}
 
-	broadcastEnvChange()
-
 	fmt.Printf("Added %s to your user PATH.\n", javaBinDir)
-	fmt.Println("Please restart any open terminals for the change to take effect.")
+
+	// Ensure JAVA_HOME is set correctly.
+	if err := setJAVA_HOME(homeDir); err != nil {
+		return err
+	}
+
 	return nil
 }
 
-// broadcastEnvChange notifies the user that they may need to log out or restart for PATH changes to take effect.
+// setJAVA_HOME ensures the user environment variable JAVA_HOME points to the symlink %USERPROFILE%\Java.
+// If JAVA_HOME is already set to a different value, the user is asked before overwriting.
+func setJAVA_HOME(homeDir string) error {
+	javaHomeDir := filepath.Join(homeDir, "Java")
+
+	k, err := registry.OpenKey(registry.CURRENT_USER, "Environment", registry.QUERY_VALUE|registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("cannot open registry: %v", err)
+	}
+	defer k.Close()
+
+	existingValue, _, err := k.GetStringValue("JAVA_HOME")
+	if err != nil && err != registry.ErrNotExist {
+		return fmt.Errorf("error reading JAVA_HOME: %v", err)
+	}
+
+	// Already set correctly? Nothing to do.
+	if strings.EqualFold(existingValue, javaHomeDir) {
+		fmt.Printf("JAVA_HOME is already set to %s\n", javaHomeDir)
+		return nil
+	}
+
+	// If it's set to something else, ask.
+	if existingValue != "" {
+		fmt.Printf("JAVA_HOME is currently set to %q.\n", existingValue)
+		fmt.Printf("Do you want to change it to %q? [y/N]: ", javaHomeDir)
+
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+		input = strings.ToLower(input)
+
+		if input != "y" && input != "yes" {
+			fmt.Println("JAVA_HOME left unchanged.")
+			return nil
+		}
+	}
+
+	// Set the new value.
+	if err := k.SetStringValue("JAVA_HOME", javaHomeDir); err != nil {
+		return fmt.Errorf("failed to set JAVA_HOME: %v", err)
+	}
+
+	fmt.Printf("JAVA_HOME set to %s\n", javaHomeDir)
+	broadcastEnvChange()
+	return nil
+}
+
+// broadcastEnvChange notifies the user that they may need to log out or restart for environment variable changes to take effect.
 func broadcastEnvChange() {
-	fmt.Println("(You may need to log out/restart for PATH to be fully refreshed.)")
+	fmt.Println("(You may need to log out/restart for environment variables to be fully refreshed.)")
 }
